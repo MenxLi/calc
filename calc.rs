@@ -1,4 +1,4 @@
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 enum Token {
     ADD, SUB, 
     MUL, DIV, 
@@ -119,7 +119,7 @@ impl ASTNode for SubNode {
 fn evaluate(p: &mut TokenParser) -> Box<dyn ASTNode> {
     let (n, t) = parse_e(p);
     if t.is_some() {
-        panic!("Extra tokens after expression.");
+        panic!("Error: Extra token after expression: {:?}", t.unwrap());
     }
     return n;
 }
@@ -134,7 +134,7 @@ fn parse_e(p: &mut TokenParser) -> (Box<dyn ASTNode>, Option<Token>) {
         n0 = match tv {
             Token::ADD => Box::new(AddNode(n0, n1)), 
             Token::SUB => Box::new(SubNode(n0, n1)), 
-            _ => panic!("Unreachable.")
+            _ => unreachable!()
         };
         match tn {
             Some(next_token) => tv = next_token,
@@ -154,7 +154,7 @@ fn parse_t(p: &mut TokenParser) -> (Box<dyn ASTNode>, Option<Token>) {
         n0 = match tv {
             Token::MUL => Box::new(MulNode(n0, n1)), 
             Token::DIV => Box::new(DivNode(n0, n1)), 
-            _ => panic!("Unreachable.")
+            _ => unreachable!()
         }; 
         match tn {
             Some(next_token) => tv = next_token,
@@ -172,11 +172,11 @@ fn parse_f(p: &mut TokenParser) -> (Box<dyn ASTNode>, Option<Token>) {
             return (Box::new(NumNode(num)), p.next());
         }
         Token::SUB => {
-            let t1 = p.next().expect("Nothing follows neg!");
+            let t1 = p.next().expect("Error: Nothing follows NEG!");
             if let Token::NUM(num) = t1 {
                 return (Box::new(NegNode(Box::new(NumNode(num)))), p.next());
             }
-            panic!("Non-num follows neg!");
+            panic!("Error: Non-num follows NEG: {:?}", t1);
         }
         Token::LPR => {
             let (expr, t1) = parse_e(p);
@@ -184,11 +184,11 @@ fn parse_f(p: &mut TokenParser) -> (Box<dyn ASTNode>, Option<Token>) {
                 Some(Token::RPR) => {
                     return (Box::new(ParNode(expr)), p.next());
                 },
-                _ => panic!("Open parenthesis."),
+                _ => panic!("Error: Open parenthesis."),
             }
         }
         _ => {
-            panic!("Illegal factor.");
+            panic!("Error: Illegal factor: {:?}", t0);
         }
     }
 }
@@ -200,11 +200,12 @@ fn main(){
     let n: Box<dyn ASTNode>;
 
     if args.len() == 1 {
-        println!("Calculator! Please input an expression:"); 
+        println!("Input your expr: "); 
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).expect("Failed to read line");
         let mut parser = TokenParser::new(input);
         n = evaluate(&mut parser);
+        println!("---")
     }
     else {
         let input = args[1].clone();
