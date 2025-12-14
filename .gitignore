@@ -1,2 +1,6 @@
 /target
 Cargo.lock
+
+calc
+*.pdb
+*.exe

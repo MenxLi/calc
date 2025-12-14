@@ -1,6 +1,10 @@
 [package]
-name = "calc-rs"
+name = "calc"
 version = "0.1.0"
 edition = "2024"
+
+[[bin]]
+name = "calc"
+path = "calc.rs"
 
 [dependencies]
