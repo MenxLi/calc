@@ -1,25 +1,24 @@
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 enum Token {
     ADD, SUB, 
     MUL, DIV, 
     NUM(i32), LPR, RPR
 }
 
-#[derive(Clone)]
-struct TokenParser<'a> {
-    input: &'a Vec<char>,
+struct TokenParser {
+    input: Vec<char>,
     idx: Option<usize>, 
 }
 
-impl<'a> TokenParser<'a> {
-    fn new(input: &'a Vec<char>) -> Self {
+impl TokenParser {
+    fn new(input: String) -> Self {
         TokenParser {
-            input,
+            input: input.chars().collect(),
             idx: Some(0),       
         }
     }
 
-    fn lookahead_idx(&self) -> Option<usize> {
+    fn next_char_idx(&self) -> Option<usize> {
         let mut c : &char;
         let mut idx = self.idx?; 
         while idx + 1 < self.input.len() {
@@ -34,7 +33,7 @@ impl<'a> TokenParser<'a> {
     }
 }
 
-impl<'a> Iterator for TokenParser<'a> {
+impl Iterator for TokenParser {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -53,7 +52,7 @@ impl<'a> Iterator for TokenParser<'a> {
                     let curr_c = self.input[self.idx.unwrap()];
                     let digit = curr_c.to_digit(10).unwrap() as i32;
                     accum = accum * 10 + digit;
-                    match self.lookahead_idx() {
+                    match self.next_char_idx() {
                         Some(next_char_idx) => {
                             let next_char = &self.input[next_char_idx]; 
                             if next_char.is_digit(10) {
@@ -70,54 +69,54 @@ impl<'a> Iterator for TokenParser<'a> {
             }, 
             _ => panic!("Invalid token '{}' at index {}", c, self.idx.unwrap_or(0)),
         };
-        self.idx = self.lookahead_idx();
+        self.idx = self.next_char_idx();
         return Some(token);
     }
 }
 
-trait Node {
+trait ASTNode {
     fn eval(&self) -> i32;
     fn repr(&self) -> String;
 }
 
 struct NumNode(i32);
-struct NegNode(Box<dyn Node>);
-struct ParNode(Box<dyn Node>);
-struct MulNode(Box<dyn Node>, Box<dyn Node>);
-struct DivNode(Box<dyn Node>, Box<dyn Node>);
-struct AddNode(Box<dyn Node>, Box<dyn Node>);
-struct SubNode(Box<dyn Node>, Box<dyn Node>);
+struct NegNode(Box<dyn ASTNode>);
+struct ParNode(Box<dyn ASTNode>);
+struct MulNode(Box<dyn ASTNode>, Box<dyn ASTNode>);
+struct DivNode(Box<dyn ASTNode>, Box<dyn ASTNode>);
+struct AddNode(Box<dyn ASTNode>, Box<dyn ASTNode>);
+struct SubNode(Box<dyn ASTNode>, Box<dyn ASTNode>);
 
-impl Node for NumNode {
+impl ASTNode for NumNode {
     fn eval(&self) -> i32 { self.0 }
     fn repr(&self) -> String { format!("{}", self.eval()) }
 }
-impl Node for NegNode {
+impl ASTNode for NegNode {
     fn eval(&self) -> i32 { - self.0.eval() }
     fn repr(&self) -> String { format!("<-{}>", self.0.repr())}
 }
-impl Node for ParNode {
+impl ASTNode for ParNode {
     fn eval(&self) -> i32 { self.0.eval() }
     fn repr(&self) -> String { format!("({})", self.0.repr())}
 }
-impl Node for MulNode {
+impl ASTNode for MulNode {
     fn eval(&self) -> i32 { self.0.eval() * self.1.eval() }
     fn repr(&self) -> String { format!("<{}*{}>", self.0.repr(), self.1.repr())}
 }
-impl Node for DivNode {
+impl ASTNode for DivNode {
     fn eval(&self) -> i32 { self.0.eval() / self.1.eval() }
     fn repr(&self) -> String { format!("<{}/{}>", self.0.repr(), self.1.repr())}
 }
-impl Node for AddNode {
+impl ASTNode for AddNode {
     fn eval(&self) -> i32 { self.0.eval() + self.1.eval() }
     fn repr(&self) -> String { format!("<{}+{}>", self.0.repr(), self.1.repr())}
 }
-impl Node for SubNode {
+impl ASTNode for SubNode {
     fn eval(&self) -> i32 { self.0.eval() - self.1.eval() }
     fn repr(&self) -> String { format!("<{}-{}>", self.0.repr(), self.1.repr())}
 }
 
-fn evaluate(p: &mut TokenParser) -> Box<dyn Node> {
+fn evaluate(p: &mut TokenParser) -> Box<dyn ASTNode> {
     let (n, t) = parse_e(p);
     if t.is_some() {
         panic!("Extra tokens after expression.");
@@ -126,24 +125,17 @@ fn evaluate(p: &mut TokenParser) -> Box<dyn Node> {
 }
 
 // <t1>+<t2>, <t1>-<t2>
-fn parse_e(p: &mut TokenParser) -> (Box<dyn Node>, Option<Token>) {
+fn parse_e(p: &mut TokenParser) -> (Box<dyn ASTNode>, Option<Token>) {
     let (mut n0, t1) = parse_t(p);
-    if t1.is_none(){
-        return (n0, None);
-    }
+    let Some(mut tv) = t1 else { return (n0, None); };
 
-    let mut tv = t1.unwrap();
     while tv == Token::ADD || tv == Token::SUB {
         let (n1, tn) = parse_t(p);
-        match tv {
-            Token::ADD => {
-                n0 = Box::new(AddNode(n0, n1));
-            }, 
-            Token::SUB => {
-                n0 = Box::new(SubNode(n0, n1));
-            }, 
-            _ => panic!("Unreachable")
-        }
+        n0 = match tv {
+            Token::ADD => Box::new(AddNode(n0, n1)), 
+            Token::SUB => Box::new(SubNode(n0, n1)), 
+            _ => panic!("Unreachable.")
+        };
         match tn {
             Some(next_token) => tv = next_token,
             None => return (n0, None),
@@ -153,23 +145,17 @@ fn parse_e(p: &mut TokenParser) -> (Box<dyn Node>, Option<Token>) {
 }
 
 // <f1>*<f2>, <f1>/<f2>
-fn parse_t(p: &mut TokenParser) -> (Box<dyn Node>, Option<Token>) {
+fn parse_t(p: &mut TokenParser) -> (Box<dyn ASTNode>, Option<Token>) {
     let (mut n0, t1) = parse_f(p);
-    if t1.is_none() {
-        return (n0, None);
-    }
-    let mut tv = t1.unwrap();
+    let Some(mut tv) = t1 else { return (n0, None); };
+
     while tv == Token::MUL || tv == Token::DIV {
         let (n1, tn) = parse_f(p);
-        match tv {
-            Token::MUL => {
-                n0 = Box::new(MulNode(n0, n1));
-            }, 
-            Token::DIV => {
-                n0 = Box::new(DivNode(n0, n1));
-            }, 
-            _ => panic!("Unreachable")
-        }
+        n0 = match tv {
+            Token::MUL => Box::new(MulNode(n0, n1)), 
+            Token::DIV => Box::new(DivNode(n0, n1)), 
+            _ => panic!("Unreachable.")
+        }; 
         match tn {
             Some(next_token) => tv = next_token,
             None => return (n0, None),
@@ -179,7 +165,7 @@ fn parse_t(p: &mut TokenParser) -> (Box<dyn Node>, Option<Token>) {
 }
 
 // num, -<num>, (<expr>)
-fn parse_f(p: &mut TokenParser) -> (Box<dyn Node>, Option<Token>) {
+fn parse_f(p: &mut TokenParser) -> (Box<dyn ASTNode>, Option<Token>) {
     let t0 = p.next().unwrap_or_else(||panic!("empty"));
     match t0 {
         Token::NUM(num) => {
@@ -190,7 +176,7 @@ fn parse_f(p: &mut TokenParser) -> (Box<dyn Node>, Option<Token>) {
             if let Token::NUM(num) = t1 {
                 return (Box::new(NegNode(Box::new(NumNode(num)))), p.next());
             }
-            panic!("Non-num of follow neg!");
+            panic!("Non-num follows neg!");
         }
         Token::LPR => {
             let (expr, t1) = parse_e(p);
@@ -211,20 +197,18 @@ fn parse_f(p: &mut TokenParser) -> (Box<dyn Node>, Option<Token>) {
 fn main(){
     let args = std::env::args().collect::<Vec<String>>();
 
-    let n: Box<dyn Node>;
+    let n: Box<dyn ASTNode>;
 
     if args.len() == 1 {
         println!("Calculator! Please input an expression:"); 
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).expect("Failed to read line");
-        let input_vec = input.trim().to_string().chars().collect();
-        let mut parser = TokenParser::new(&input_vec);
+        let mut parser = TokenParser::new(input);
         n = evaluate(&mut parser);
     }
     else {
-        let input = &args[1];
-        let input_vec = input.trim().to_string().chars().collect();
-        let mut parser = TokenParser::new(&input_vec);
+        let input = args[1].clone();
+        let mut parser = TokenParser::new(input);
         n = evaluate(&mut parser);
     }
 
@@ -238,18 +222,28 @@ mod tests {
 
     #[test]
     fn test_expr1(){
-        let input = "-1 * (-2 + 5)".chars().collect();
-        let mut parser = TokenParser::new(&input);
+        let mut parser = TokenParser::new(
+            "-1 * (-2 + 5)".to_string()
+        );
         let n = evaluate(&mut parser);
         assert_eq!(n.eval(), -3);
     }
 
     #[test]
     fn test_expr2(){
-        let input = "12 + 34 - (56 / 7) * 8".chars().collect();
-        let mut parser = TokenParser::new(&input);
+        let mut parser = TokenParser::new(
+            "12 + 34 - (56 / 7) * 8".to_string()
+        );
         let n = evaluate(&mut parser);
         assert_eq!(n.eval(), -18);
     }
 
+    #[test]
+    fn test_expr3(){
+        let mut parser = TokenParser::new(
+            "(-12 + 34) * ((56 / 7) + 8)".to_string()
+        );
+        let n = evaluate(&mut parser);
+        assert_eq!(n.eval(), 352);
+    }
 }
