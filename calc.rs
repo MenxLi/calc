@@ -1,3 +1,46 @@
+
+trait ASTNode {
+    fn eval(&self) -> i32;
+    fn repr(&self) -> String;
+}
+
+struct NumNode(i32);
+struct NegNode(Box<dyn ASTNode>);
+struct ParNode(Box<dyn ASTNode>);
+struct MulNode(Box<dyn ASTNode>, Box<dyn ASTNode>);
+struct DivNode(Box<dyn ASTNode>, Box<dyn ASTNode>);
+struct AddNode(Box<dyn ASTNode>, Box<dyn ASTNode>);
+struct SubNode(Box<dyn ASTNode>, Box<dyn ASTNode>);
+
+impl ASTNode for NumNode {
+    fn eval(&self) -> i32 { self.0 }
+    fn repr(&self) -> String { format!("{}", self.eval()) }
+}
+impl ASTNode for NegNode {
+    fn eval(&self) -> i32 { - self.0.eval() }
+    fn repr(&self) -> String { format!("<-{}>", self.0.repr())}
+}
+impl ASTNode for ParNode {
+    fn eval(&self) -> i32 { self.0.eval() }
+    fn repr(&self) -> String { format!("({})", self.0.repr())}
+}
+impl ASTNode for MulNode {
+    fn eval(&self) -> i32 { self.0.eval() * self.1.eval() }
+    fn repr(&self) -> String { format!("<{}*{}>", self.0.repr(), self.1.repr())}
+}
+impl ASTNode for DivNode {
+    fn eval(&self) -> i32 { self.0.eval() / self.1.eval() }
+    fn repr(&self) -> String { format!("<{}/{}>", self.0.repr(), self.1.repr())}
+}
+impl ASTNode for AddNode {
+    fn eval(&self) -> i32 { self.0.eval() + self.1.eval() }
+    fn repr(&self) -> String { format!("<{}+{}>", self.0.repr(), self.1.repr())}
+}
+impl ASTNode for SubNode {
+    fn eval(&self) -> i32 { self.0.eval() - self.1.eval() }
+    fn repr(&self) -> String { format!("<{}-{}>", self.0.repr(), self.1.repr())}
+}
+
 #[derive(Clone, PartialEq, Debug)]
 enum Token {
     ADD, SUB, 
@@ -74,50 +117,9 @@ impl Iterator for TokenParser {
     }
 }
 
-trait ASTNode {
-    fn eval(&self) -> i32;
-    fn repr(&self) -> String;
-}
-
-struct NumNode(i32);
-struct NegNode(Box<dyn ASTNode>);
-struct ParNode(Box<dyn ASTNode>);
-struct MulNode(Box<dyn ASTNode>, Box<dyn ASTNode>);
-struct DivNode(Box<dyn ASTNode>, Box<dyn ASTNode>);
-struct AddNode(Box<dyn ASTNode>, Box<dyn ASTNode>);
-struct SubNode(Box<dyn ASTNode>, Box<dyn ASTNode>);
-
-impl ASTNode for NumNode {
-    fn eval(&self) -> i32 { self.0 }
-    fn repr(&self) -> String { format!("{}", self.eval()) }
-}
-impl ASTNode for NegNode {
-    fn eval(&self) -> i32 { - self.0.eval() }
-    fn repr(&self) -> String { format!("<-{}>", self.0.repr())}
-}
-impl ASTNode for ParNode {
-    fn eval(&self) -> i32 { self.0.eval() }
-    fn repr(&self) -> String { format!("({})", self.0.repr())}
-}
-impl ASTNode for MulNode {
-    fn eval(&self) -> i32 { self.0.eval() * self.1.eval() }
-    fn repr(&self) -> String { format!("<{}*{}>", self.0.repr(), self.1.repr())}
-}
-impl ASTNode for DivNode {
-    fn eval(&self) -> i32 { self.0.eval() / self.1.eval() }
-    fn repr(&self) -> String { format!("<{}/{}>", self.0.repr(), self.1.repr())}
-}
-impl ASTNode for AddNode {
-    fn eval(&self) -> i32 { self.0.eval() + self.1.eval() }
-    fn repr(&self) -> String { format!("<{}+{}>", self.0.repr(), self.1.repr())}
-}
-impl ASTNode for SubNode {
-    fn eval(&self) -> i32 { self.0.eval() - self.1.eval() }
-    fn repr(&self) -> String { format!("<{}-{}>", self.0.repr(), self.1.repr())}
-}
-
-fn evaluate(p: &mut TokenParser) -> Box<dyn ASTNode> {
-    let (n, t) = parse_e(p);
+// main entry point
+fn evaluate(mut p: TokenParser) -> Box<dyn ASTNode> {
+    let (n, t) = parse_e(&mut p);
     if t.is_some() {
         panic!("Error: Extra token after expression: {:?}", t.unwrap());
     }
@@ -203,14 +205,14 @@ fn main(){
         println!("Input your expr: "); 
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).expect("Failed to read line");
-        let mut parser = TokenParser::new(input);
-        n = evaluate(&mut parser);
+        let parser = TokenParser::new(input);
+        n = evaluate(parser);
         println!("---")
     }
     else {
         let input = args[1].clone();
-        let mut parser = TokenParser::new(input);
-        n = evaluate(&mut parser);
+        let parser = TokenParser::new(input);
+        n = evaluate(parser);
     }
 
     println!("REPR: {}", n.repr());
@@ -223,28 +225,28 @@ mod tests {
 
     #[test]
     fn test_expr1(){
-        let mut parser = TokenParser::new(
+        let parser = TokenParser::new(
             "-1 * (-2 + 5)".to_string()
         );
-        let n = evaluate(&mut parser);
+        let n = evaluate(parser);
         assert_eq!(n.eval(), -3);
     }
 
     #[test]
     fn test_expr2(){
-        let mut parser = TokenParser::new(
+        let parser = TokenParser::new(
             "12 + 34 - (56 / 7) * 8".to_string()
         );
-        let n = evaluate(&mut parser);
+        let n = evaluate(parser);
         assert_eq!(n.eval(), -18);
     }
 
     #[test]
     fn test_expr3(){
-        let mut parser = TokenParser::new(
+        let parser = TokenParser::new(
             "(-12 + 34) * ((56 / 7) + 8)".to_string()
         );
-        let n = evaluate(&mut parser);
+        let n = evaluate(parser);
         assert_eq!(n.eval(), 352);
     }
 }
